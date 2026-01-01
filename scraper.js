@@ -1,7 +1,6 @@
 /**
  * Moneyview IVR Scraper – LOOP MODE
- * All credentials and config embedded in code
- * Optimized for Render Deployment
+ * Optimized for Render Deployment with Chrome fix
  */
 
 const puppeteer = require("puppeteer");
@@ -12,10 +11,10 @@ const mysql = require("mysql2/promise");
 ================================ */
 // Database Configuration
 const DB_CONFIG = {
-    host: "82.25.121.2",        // Your database host
-    user: "u527886566_scraper_db",   // Your database username
-    password: "VAKILr6762",       // Your database password
-    database: "u527886566_scraper_db", // Your database name
+    host: "82.25.121.2",
+    user: "u527886566_scraper_db",
+    password: "VAKILr6762",
+    database: "u527886566_scraper_db",
     port: 3306,
     waitForConnections: true,
     connectionLimit: 5,
@@ -25,8 +24,8 @@ const DB_CONFIG = {
 
 // Moneyview Login Credentials
 const LOGIN_CREDENTIALS = {
-    email: "admin@switchmyloan.in",    // Your login email
-    password: "Admin@123"               // Your login password
+    email: "admin@switchmyloan.in",
+    password: "Admin@123"
 };
 
 // Scraper Settings
@@ -36,16 +35,16 @@ const LOGIN_URL = "https://mv-dashboard.switchmyloan.in/login";
 const DATA_URL  = "https://mv-dashboard.switchmyloan.in/mv-ivr-logs";
 
 /* ===============================
-   COLUMN INDEXES (Don't change unless table structure changes)
+   COLUMN INDEXES
 ================================ */
-const IDX_SN      = 0;  // Serial Number
-const IDX_NAME    = 1;  // Full Name
-const IDX_MSG     = 2;  // Moneyview Message
-const IDX_NUMBER  = 3;  // Phone Number
-const IDX_PAN     = 4;  // PAN Card
-const IDX_SALARY  = 5;  // Salary
-const IDX_DOB     = 6;  // Date of Birth (raw)
-const IDX_CREATED = 7;  // Created Date
+const IDX_SN      = 0;
+const IDX_NAME    = 1;
+const IDX_MSG     = 2;
+const IDX_NUMBER  = 3;
+const IDX_PAN     = 4;
+const IDX_SALARY  = 5;
+const IDX_DOB     = 6;
+const IDX_CREATED = 7;
 
 /* ===============================
    HELPER FUNCTIONS
@@ -54,26 +53,16 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function log(msg, type = "INFO") {
     const timestamp = new Date().toISOString();
-    const typeColor = {
-        'INFO': '\x1b[36m',    // Cyan
-        'SUCCESS': '\x1b[32m', // Green
-        'WARN': '\x1b[33m',    // Yellow
-        'ERROR': '\x1b[31m',   // Red
-        'CRITICAL': '\x1b[41m\x1b[37m' // Red background, white text
-    }[type] || '\x1b[0m';
-    
-    console.log(`\x1b[90m[${timestamp}]\x1b[0m ${typeColor}[${type}]\x1b[0m ${msg}`);
+    console.log(`[${timestamp}] [${type}] ${msg}`);
 }
 
 function parseDate(val) {
     if (!val) return null;
     val = val.trim();
 
-    // Try ISO date first
     const iso = new Date(val);
     if (!isNaN(iso)) return iso.toISOString().split("T")[0];
 
-    // Try DD/MM/YYYY format
     const m = val.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (m) {
         const d = new Date(m[3], m[2] - 1, m[1]);
@@ -117,10 +106,10 @@ async function initDB() {
 }
 
 /* ===============================
-   BROWSER SETUP for Render
+   BROWSER SETUP for Render - FIXED
 ================================ */
 async function createBrowser() {
-    log("Launching Chrome browser...");
+    log("Launching browser...");
     
     const launchOptions = {
         headless: "new",
@@ -131,26 +120,37 @@ async function createBrowser() {
             "--disable-gpu",
             "--single-process",
             "--no-zygote",
-            "--disable-features=site-per-process",
-            "--disable-accelerated-2d-canvas",
-            "--disable-background-timer-throttling",
-            "--disable-backgrounding-occluded-windows",
-            "--disable-breakpad",
-            "--disable-component-extensions-with-background-pages",
-            "--disable-extensions",
-            "--disable-features=TranslateUI",
-            "--disable-ipc-flooding-protection",
-            "--disable-renderer-backgrounding",
-            "--window-size=1366,768"
+            "--disable-features=site-per-process"
         ],
         ignoreHTTPSErrors: true,
         timeout: 30000
     };
 
-    // On Render, use system Chrome
-    if (process.env.RENDER) {
-        launchOptions.executablePath = process.env.CHROME_PATH || '/usr/bin/chromium';
-        log(`Using Chrome executable at: ${launchOptions.executablePath}`);
+    // Try different Chrome paths on Render
+    const chromePaths = [
+        '/usr/bin/chromium-browser',
+        '/usr/bin/chromium',
+        '/usr/bin/google-chrome-stable',
+        '/usr/bin/google-chrome',
+        '/opt/google/chrome/chrome'
+    ];
+
+    for (const path of chromePaths) {
+        try {
+            const fs = require('fs');
+            if (fs.existsSync(path)) {
+                launchOptions.executablePath = path;
+                log(`Found Chrome at: ${path}`);
+                break;
+            }
+        } catch (e) {
+            // Continue to next path
+        }
+    }
+
+    // If no Chrome found, let puppeteer download it
+    if (!launchOptions.executablePath) {
+        log("No system Chrome found, puppeteer will download Chrome", "WARN");
     }
 
     try {
@@ -161,9 +161,17 @@ async function createBrowser() {
     } catch (error) {
         log(`Failed to launch browser: ${error.message}`, "ERROR");
         
-        // If Chrome not found, try to provide helpful message
-        if (error.message.includes('Could not find Chrome')) {
-            log("Chrome not found. Make sure to run 'npx puppeteer browsers install chrome' in build command", "CRITICAL");
+        // Try one more time without specifying executable path
+        if (launchOptions.executablePath) {
+            log("Retrying without specific executable path...", "WARN");
+            delete launchOptions.executablePath;
+            try {
+                const browser = await puppeteer.launch(launchOptions);
+                log("Browser launched using puppeteer's bundled Chrome", "SUCCESS");
+                return browser;
+            } catch (retryError) {
+                log(`Retry also failed: ${retryError.message}`, "ERROR");
+            }
         }
         
         throw error;
@@ -184,51 +192,29 @@ async function login(page) {
 
         // Wait for login form
         await page.waitForSelector('input[name="email"]', { timeout: 30000 });
-        await page.waitForSelector('input[name="password"]', { timeout: 30000 });
 
         log("Entering credentials...");
-        // Enter email
         await page.type('input[name="email"]', LOGIN_CREDENTIALS.email, { delay: 30 });
-        // Enter password
         await page.type('input[name="password"]', LOGIN_CREDENTIALS.password, { delay: 30 });
 
         log("Submitting login form...");
-        // Click submit and wait for navigation
         await Promise.all([
             page.click('button[type="submit"]'),
             page.waitForNavigation({ waitUntil: "networkidle0", timeout: 60000 })
         ]);
 
-        // Verify login success
+        // Check if login was successful
+        await sleep(2000);
         const currentUrl = page.url();
+        
         if (currentUrl.includes('dashboard') || currentUrl.includes('mv-ivr-logs')) {
-            log("Login successful! Redirected to dashboard", "SUCCESS");
+            log("Login successful!", "SUCCESS");
             return true;
         } else {
-            // Check for login errors
-            const errorText = await page.evaluate(() => {
-                const errorEl = document.querySelector('.error, .alert-danger, [class*="error"]');
-                return errorEl ? errorEl.textContent.trim() : null;
-            }).catch(() => null);
-            
-            if (errorText) {
-                throw new Error(`Login failed: ${errorText}`);
-            } else {
-                throw new Error(`Login may have failed. Current URL: ${currentUrl}`);
-            }
+            throw new Error(`Login may have failed. Current URL: ${currentUrl}`);
         }
     } catch (error) {
         log(`Login failed: ${error.message}`, "ERROR");
-        // Take screenshot for debugging
-        try {
-            await page.screenshot({ 
-                path: '/tmp/login-error.png',
-                fullPage: true 
-            });
-            log("Screenshot saved to /tmp/login-error.png", "INFO");
-        } catch (screenshotError) {
-            // Ignore screenshot errors
-        }
         throw error;
     }
 }
@@ -237,7 +223,7 @@ async function login(page) {
    SCRAPE FUNCTION
 ================================ */
 async function scrape(page, pool) {
-    log(`Navigating to IVR logs at ${DATA_URL}...`);
+    log(`Navigating to ${DATA_URL}...`);
     
     try {
         await page.goto(DATA_URL, { 
@@ -245,11 +231,8 @@ async function scrape(page, pool) {
             timeout: 60000 
         });
 
-        // Wait for table to load
-        log("Waiting for data table to load...");
+        // Wait for table
         await page.waitForSelector("tbody tr", { timeout: 30000 });
-        
-        // Give a moment for JavaScript to render
         await sleep(2000);
 
         const rows = await page.evaluate(() => {
@@ -260,7 +243,6 @@ async function scrape(page, pool) {
                 const cells = tr.querySelectorAll("td");
                 const rowData = Array.from(cells).map(cell => {
                     let text = cell.textContent || cell.innerText;
-                    // Clean up whitespace
                     text = text.replace(/\s+/g, ' ').trim();
                     return text;
                 });
@@ -273,10 +255,10 @@ async function scrape(page, pool) {
             return rows;
         });
 
-        log(`Found ${rows.length} data rows to process`);
+        log(`Found ${rows.length} rows`);
 
         if (rows.length === 0) {
-            log("No data found in table. The table might be empty or selectors changed.", "WARN");
+            log("No data found", "WARN");
             return { inserted: 0, duplicates: 0, errors: 0 };
         }
 
@@ -284,28 +266,15 @@ async function scrape(page, pool) {
         let duplicates = 0;
         let errors = 0;
 
-        log("Processing rows and inserting into database...");
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
-            
-            // Log first row for debugging
-            if (i === 0) {
-                log(`First row sample: ${row.slice(0, 3).join(' | ')}...`, "DEBUG");
-            }
             
             try {
                 const result = await pool.execute(`
                     INSERT INTO ivr_logs
                     (sn, full_name, moneyview_msg, phone_number, pan_card, salary, dob_raw, dob, created)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE 
-                        sn = VALUES(sn),
-                        full_name = VALUES(full_name),
-                        moneyview_msg = VALUES(moneyview_msg),
-                        salary = VALUES(salary),
-                        dob_raw = VALUES(dob_raw),
-                        dob = VALUES(dob),
-                        scrape_timestamp = NOW()
+                    ON DUPLICATE KEY UPDATE scrape_timestamp = NOW()
                 `, [
                     row[IDX_SN] || '',
                     row[IDX_NAME] || '',
@@ -328,34 +297,21 @@ async function scrape(page, pool) {
                     duplicates++;
                 } else {
                     errors++;
-                    log(`DB Error for row ${i + 1}: ${error.message}`, "ERROR");
                 }
             }
         }
 
-        log(`Database Update - Inserted: ${inserted} | Duplicates: ${duplicates} | Errors: ${errors}`, "SUCCESS");
+        log(`Inserted: ${inserted} | Duplicates: ${duplicates} | Errors: ${errors}`, "SUCCESS");
         return { inserted, duplicates, errors };
         
     } catch (error) {
         log(`Scrape error: ${error.message}`, "ERROR");
-        
-        // Take screenshot for debugging
-        try {
-            await page.screenshot({ 
-                path: '/tmp/scrape-error.png',
-                fullPage: true 
-            });
-            log("Screenshot saved to /tmp/scrape-error.png", "INFO");
-        } catch (screenshotError) {
-            // Ignore screenshot errors
-        }
-        
         throw error;
     }
 }
 
 /* ===============================
-   MAIN APPLICATION LOOP
+   MAIN APPLICATION
 ================================ */
 (async () => {
     let browser = null;
@@ -363,75 +319,45 @@ async function scrape(page, pool) {
     let pool = null;
     let errorCount = 0;
     let isShuttingDown = false;
-    let scrapeCount = 0;
 
-    // Cleanup function
     async function cleanup(exit = false) {
         if (isShuttingDown) return;
         isShuttingDown = true;
         
-        log("Cleaning up resources...");
+        log("Cleaning up...");
         
-        const cleanupTasks = [];
+        try {
+            if (page && !page.isClosed()) await page.close();
+        } catch (e) {}
         
-        if (page && !page.isClosed()) {
-            cleanupTasks.push(page.close().catch(e => log(`Page close error: ${e.message}`, "DEBUG")));
-        }
+        try {
+            if (browser) await browser.close();
+        } catch (e) {}
         
-        if (browser) {
-            cleanupTasks.push(browser.close().catch(e => log(`Browser close error: ${e.message}`, "DEBUG")));
-        }
-        
-        if (pool) {
-            cleanupTasks.push(pool.end().catch(e => log(`Pool end error: ${e.message}`, "DEBUG")));
-        }
-        
-        await Promise.allSettled(cleanupTasks);
+        try {
+            if (pool) await pool.end();
+        } catch (e) {}
         
         if (exit) {
-            log("Shutdown complete. Exiting process.", "INFO");
+            log("Exiting...");
             setTimeout(() => process.exit(0), 100);
         }
     }
 
-    // Handle shutdown signals
-    process.on('SIGINT', () => {
-        log("Received SIGINT signal, initiating graceful shutdown...", "WARN");
-        cleanup(true);
-    });
-    
-    process.on('SIGTERM', () => {
-        log("Received SIGTERM signal, initiating graceful shutdown...", "WARN");
-        cleanup(true);
-    });
-
-    // Handle uncaught errors
-    process.on('uncaughtException', (error) => {
-        log(`Uncaught Exception: ${error.message}`, "CRITICAL");
-        log(error.stack, "DEBUG");
-        cleanup(true);
-    });
-    
-    process.on('unhandledRejection', (reason, promise) => {
-        log(`Unhandled Rejection at: ${promise}. Reason: ${reason}`, "CRITICAL");
-        cleanup(true);
-    });
+    process.on('SIGINT', () => cleanup(true));
+    process.on('SIGTERM', () => cleanup(true));
 
     try {
-        log("╔══════════════════════════════════════════════════════════╗", "INFO");
-        log("║         MONEYVIEW IVR SCRAPER - STARTING                ║", "INFO");
-        log("║                    Render Deployment                    ║", "INFO");
-        log("╚══════════════════════════════════════════════════════════╝", "INFO");
+        log("========================================");
+        log("MONEYVIEW SCRAPER STARTING");
+        log("========================================");
         
         log(`Database: ${DB_CONFIG.host}/${DB_CONFIG.database}`);
         log(`Login: ${LOGIN_CREDENTIALS.email}`);
-        log(`Scrape Interval: ${SCRAPE_INTERVAL_MS/1000} seconds`);
-        log(`Running on: ${process.env.RENDER ? 'Render.com' : 'Local'}`);
+        log(`Interval: ${SCRAPE_INTERVAL_MS/1000}s`);
         
-        // Initialize database connection
+        // Initialize
         pool = await initDB();
-        
-        // Initialize browser
         browser = await createBrowser();
         page = await browser.newPage();
         
@@ -439,71 +365,29 @@ async function scrape(page, pool) {
         await page.setViewport({ width: 1366, height: 768 });
         await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
         
-        // Set request timeout
-        page.setDefaultTimeout(60000);
-        
-        // Perform login
+        // Login
         await login(page);
         
-        log("╔══════════════════════════════════════════════════════════╗", "SUCCESS");
-        log("║          SYSTEM READY - STARTING MAIN LOOP              ║", "SUCCESS");
-        log("╚══════════════════════════════════════════════════════════╝", "SUCCESS");
+        log("READY - Starting main loop");
         
-        // Main execution loop
+        // Main loop
         while (true) {
-            scrapeCount++;
-            const cycleStart = Date.now();
-            
             try {
-                log(`\n═════════════ Scrape Cycle #${scrapeCount} ═════════════`, "INFO");
+                await scrape(page, pool);
+                errorCount = 0;
                 
-                const result = await scrape(page, pool);
-                
-                // Check if scrape was successful
-                if (result.errors === 0 || result.inserted > 0) {
-                    errorCount = 0; // Reset error count on successful scrape
-                    log(`Cycle #${scrapeCount} completed successfully`, "SUCCESS");
-                } else {
-                    errorCount++;
-                    log(`Cycle #${scrapeCount} had issues. Error count: ${errorCount}/${MAX_ERRORS}`, "WARN");
-                }
-                
-                const cycleTime = Date.now() - cycleStart;
-                log(`Cycle #${scrapeCount} took ${cycleTime}ms`);
-                
-                // Check if we need to restart browser due to too many errors
-                if (errorCount >= MAX_ERRORS) {
-                    log(`Too many consecutive errors (${errorCount}). Restarting browser session...`, "WARN");
-                    
-                    await cleanup(false);
-                    
-                    // Reinitialize everything
-                    browser = await createBrowser();
-                    page = await browser.newPage();
-                    await page.setViewport({ width: 1366, height: 768 });
-                    await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-                    await login(page);
-                    
-                    errorCount = 0;
-                    log("Browser session restarted successfully", "SUCCESS");
-                }
-                
-                // Wait for next scrape cycle
-                const sleepSeconds = SCRAPE_INTERVAL_MS / 1000;
-                log(`Sleeping for ${sleepSeconds} seconds until next scrape cycle...`);
+                log(`Sleeping ${SCRAPE_INTERVAL_MS/1000}s...`);
                 await sleep(SCRAPE_INTERVAL_MS);
                 
-            } catch (cycleError) {
+            } catch (error) {
                 errorCount++;
-                log(`Cycle #${scrapeCount} failed: ${cycleError.message}`, "ERROR");
-                log(`Error count: ${errorCount}/${MAX_ERRORS}`);
+                log(`Error ${errorCount}/${MAX_ERRORS}: ${error.message}`, "ERROR");
                 
                 if (errorCount >= MAX_ERRORS) {
-                    log(`Maximum error threshold reached. Performing full restart...`, "CRITICAL");
-                    
+                    log("Too many errors, restarting...", "WARN");
                     await cleanup(false);
                     
-                    // Full reinitialization
+                    // Reinitialize
                     browser = await createBrowser();
                     page = await browser.newPage();
                     await page.setViewport({ width: 1366, height: 768 });
@@ -511,21 +395,14 @@ async function scrape(page, pool) {
                     await login(page);
                     
                     errorCount = 0;
-                    scrapeCount = 0;
-                    log("Full system restart completed", "SUCCESS");
                 } else {
-                    // Wait a bit before retry
-                    const retryDelay = Math.min(30000, 5000 * errorCount); // Exponential backoff, max 30s
-                    log(`Retrying in ${retryDelay/1000} seconds...`);
-                    await sleep(retryDelay);
+                    await sleep(5000);
                 }
             }
         }
         
     } catch (fatalError) {
-        log(`FATAL STARTUP ERROR: ${fatalError.message}`, "CRITICAL");
-        log(fatalError.stack, "DEBUG");
+        log(`FATAL: ${fatalError.message}`, "CRITICAL");
         await cleanup(true);
     }
 })();
-
