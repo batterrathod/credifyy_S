@@ -1,0 +1,26 @@
+{
+  "name": "moneyview-scraper",
+  "version": "1.0.0",
+  "description": "Moneyview IVR Puppeteer Scraper (GitHub Actions)",
+  "main": "scraper.js",
+  "scripts": {
+    "start": "node scraper.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "mysql2": "^3.16.0",
+    "puppeteer": "^22.15.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/batterrathod/web-scraper.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/batterrathod/web-scraper/issues"
+  },
+  "homepage": "https://github.com/batterrathod/web-scraper#readme"
+}
