@@ -13,9 +13,9 @@ const mysql = require("mysql2/promise");
 // Database Configuration
 const DB_CONFIG = {
     host: "82.25.121.2",        // Your database host
-    user: "u563444031_ruser",   // Your database username
-    password: "Root@123",       // Your database password
-    database: "u563444031_ruby", // Your database name
+    user: "u527886566_scraper_db",   // Your database username
+    password: "VAKILr6762",       // Your database password
+    database: "u527886566_scraper_db", // Your database name
     port: 3306,
     waitForConnections: true,
     connectionLimit: 5,
@@ -25,8 +25,8 @@ const DB_CONFIG = {
 
 // Moneyview Login Credentials
 const LOGIN_CREDENTIALS = {
-    email: "mkmassociates234@gmail.com",    // Your login email
-    password: "Z9r?Qn#H8p$L"               // Your login password
+    email: "admin@switchmyloan.in",    // Your login email
+    password: "Admin@123"               // Your login password
 };
 
 // Scraper Settings
@@ -528,3 +528,4 @@ async function scrape(page, pool) {
         await cleanup(true);
     }
 })();
+
