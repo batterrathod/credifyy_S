@@ -3,9 +3,15 @@
   "version": "1.0.0",
   "description": "Moneyview IVR Puppeteer Scraper (GitHub Actions)",
   "main": "scraper.js",
+  {
   "scripts": {
-    "start": "node scraper.js"
+    "start": "node scraper.js",
+    "build": "npm install && npx puppeteer browsers install chrome"
   },
+  "dependencies": {
+    "puppeteer": "^24.1.1"
+  }
+}
   "dependencies": {
     "dotenv": "^17.2.3",
     "mysql2": "^3.16.0",
@@ -24,3 +30,4 @@
   },
   "homepage": "https://github.com/batterrathod/web-scraper#readme"
 }
+
