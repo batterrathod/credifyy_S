@@ -1,11 +1,11 @@
 {
   "name": "moneyview-scraper",
   "version": "1.0.0",
-  "description": "Moneyview IVR Scraper for Render - All-in-One",
+  "description": "Moneyview IVR Scraper for Render",
   "main": "scraper.js",
   "scripts": {
     "start": "node scraper.js",
-    "build": "npm install && npx puppeteer browsers install chrome"
+    "build": "npm install && apt-get update && apt-get install -y chromium"
   },
   "dependencies": {
     "puppeteer": "^24.1.1",
@@ -13,8 +13,5 @@
   },
   "engines": {
     "node": ">=18.0.0"
-  },
-  "keywords": ["scraper", "moneyview", "puppeteer", "mysql"],
-  "author": "Your Name",
-  "license": "MIT"
+  }
 }
