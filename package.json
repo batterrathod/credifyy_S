@@ -1,7 +1,7 @@
 {
   "name": "moneyview-scraper",
   "version": "1.0.0",
-  "description": "Moneyview IVR Scraper for Render",
+  "description": "Moneyview IVR Scraper for Render - All-in-One",
   "main": "scraper.js",
   "scripts": {
     "start": "node scraper.js",
@@ -9,10 +9,12 @@
   },
   "dependencies": {
     "puppeteer": "^24.1.1",
-    "mysql2": "^3.11.0",
-    "dotenv": "^16.4.1"
+    "mysql2": "^3.11.0"
   },
   "engines": {
     "node": ">=18.0.0"
-  }
+  },
+  "keywords": ["scraper", "moneyview", "puppeteer", "mysql"],
+  "author": "Your Name",
+  "license": "MIT"
 }
